@@ -1,0 +1,1 @@
+"""Data models and schemas for the Global Semiconductor Crisis Resilience Platform.""" 

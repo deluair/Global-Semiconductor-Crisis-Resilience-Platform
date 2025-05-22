@@ -1,0 +1,1 @@
+"""API package for the Global Semiconductor Crisis Resilience Platform.""" 

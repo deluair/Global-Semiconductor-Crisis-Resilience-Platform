@@ -1,0 +1,1 @@
+"""Web interface package for the Global Semiconductor Crisis Resilience Platform.""" 
