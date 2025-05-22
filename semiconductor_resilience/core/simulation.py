@@ -48,6 +48,7 @@ class SupplyChainSimulator:
         self.graph.add_edge(
             str(edge.source_id),
             str(edge.target_id),
+            id=str(edge.id),
             **edge.dict(exclude={"id", "source_id", "target_id"}),
         )
 
@@ -105,28 +106,28 @@ class SupplyChainSimulator:
             throughput = node.capacity * node.utilization
             
             # Calculate inventory changes
-            incoming_edges = self.graph.in_edges(node_id)
-            outgoing_edges = self.graph.out_edges(node_id)
+            incoming_edges = self.graph.in_edges(node_id, data=True)
+            outgoing_edges = self.graph.out_edges(node_id, data=True)
             
             incoming_flow = sum(
-                self.state.edges[str(edge_id)].capacity
-                for _, _, edge_id in incoming_edges
+                self.state.edges[edge_data['id']].capacity
+                for _, _, edge_data in incoming_edges
             )
             outgoing_flow = sum(
-                self.state.edges[str(edge_id)].capacity
-                for _, _, edge_id in outgoing_edges
+                self.state.edges[edge_data['id']].capacity
+                for _, _, edge_data in outgoing_edges
             )
             
             # Calculate lead time as average of incoming edge lead times
             lead_time = np.mean([
-                self.state.edges[str(edge_id)].lead_time_days
-                for _, _, edge_id in incoming_edges
+                self.state.edges[edge_data['id']].lead_time_days
+                for _, _, edge_data in incoming_edges
             ]) if incoming_edges else 0
             
             # Calculate quality score based on node reliability and incoming material quality
             quality_score = node.risk_score * np.mean([
-                self.state.edges[str(edge_id)].reliability_score
-                for _, _, edge_id in incoming_edges
+                self.state.edges[edge_data['id']].reliability_score
+                for _, _, edge_data in incoming_edges
             ]) if incoming_edges else node.risk_score
             
             # Create metrics for this node
@@ -137,8 +138,8 @@ class SupplyChainSimulator:
                 inventory_level=incoming_flow - outgoing_flow,
                 lead_time=lead_time,
                 cost_per_unit=sum(
-                    self.state.edges[str(edge_id)].cost_per_unit
-                    for _, _, edge_id in incoming_edges
+                    self.state.edges[edge_data['id']].cost_per_unit
+                    for _, _, edge_data in incoming_edges
                 ) / len(incoming_edges) if incoming_edges else 0,
                 quality_score=quality_score,
             )

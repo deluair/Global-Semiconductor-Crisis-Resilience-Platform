@@ -314,36 +314,53 @@ app.layout = dbc.Container(
     ],
     [Input("init-sim-button", "n_clicks")],
     [State("simulation-state", "data")],
+    prevent_initial_call=True,
 )
 def initialize_simulation(n_clicks, current_state):
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
     
-    # Initialize simulation
-    response = requests.post(f"{API_URL}/simulation/initialize")
-    data = response.json()
-    
-    # Create visualizations
-    network_fig = create_network_graph(data["nodes"], data["edges"])
-    metrics_fig = create_metrics_plot(data["metrics"])
-    
-    # Create health metrics display
-    health_metrics = [
-        html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
-        html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
-        html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
-        html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
-    ]
-    
-    # Get available scenarios
-    scenarios_response = requests.get(f"{API_URL}/simulation/scenarios")
-    scenarios = scenarios_response.json()
-    scenario_options = [
-        {"label": s["name"], "value": json.dumps(s)}
-        for s in scenarios
-    ]
-    
-    return data, network_fig, metrics_fig, health_metrics, scenario_options
+    try:
+        # Initialize simulation
+        response = requests.post(f"{API_URL}/simulation/initialize")
+        response.raise_for_status()  # Raise an exception for bad status codes
+        data = response.json()
+        
+        # Create visualizations
+        network_fig = create_network_graph(data["nodes"], data["edges"])
+        metrics_fig = create_metrics_plot(data["metrics"])
+        
+        # Create health metrics display
+        health_metrics = [
+            html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
+            html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
+            html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
+            html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
+        ]
+        
+        # Get available scenarios
+        scenarios_response = requests.get(f"{API_URL}/simulation/scenarios")
+        scenarios_response.raise_for_status()
+        scenarios = scenarios_response.json()
+        scenario_options = [
+            {"label": s["name"], "value": json.dumps(s)}
+            for s in scenarios
+        ]
+        
+        return data, network_fig, metrics_fig, health_metrics, scenario_options
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error during API call: {str(e)}")
+        # Return empty/default values in case of error
+        empty_fig = go.Figure()
+        empty_fig.update_layout(title="Error loading data")
+        return (
+            {},  # empty simulation state
+            empty_fig,  # empty network graph
+            empty_fig,  # empty metrics graph
+            html.H5("Error: Could not connect to simulation server"),  # error message
+            []  # empty scenario options
+        )
 
 
 @app.callback(
@@ -358,26 +375,40 @@ def initialize_simulation(n_clicks, current_state):
     prevent_initial_call=True,
 )
 def step_simulation(n_clicks, current_state):
-    if n_clicks is None:
+    if n_clicks is None or not current_state:
         raise dash.exceptions.PreventUpdate
     
-    # Step simulation
-    response = requests.post(f"{API_URL}/simulation/step")
-    data = response.json()
-    
-    # Create visualizations
-    network_fig = create_network_graph(data["nodes"], data["edges"])
-    metrics_fig = create_metrics_plot(data["metrics"])
-    
-    # Create health metrics display
-    health_metrics = [
-        html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
-        html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
-        html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
-        html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
-    ]
-    
-    return data, network_fig, metrics_fig, health_metrics
+    try:
+        # Step simulation
+        response = requests.post(f"{API_URL}/simulation/step")
+        response.raise_for_status()
+        data = response.json()
+        
+        # Create visualizations
+        network_fig = create_network_graph(data["nodes"], data["edges"])
+        metrics_fig = create_metrics_plot(data["metrics"])
+        
+        # Create health metrics display
+        health_metrics = [
+            html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
+            html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
+            html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
+            html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
+        ]
+        
+        return data, network_fig, metrics_fig, health_metrics
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error during API call: {str(e)}")
+        # Return current state in case of error
+        empty_fig = go.Figure()
+        empty_fig.update_layout(title="Error loading data")
+        return (
+            current_state,  # keep current state
+            empty_fig,  # empty network graph
+            empty_fig,  # empty metrics graph
+            html.H5("Error: Could not connect to simulation server")  # error message
+        )
 
 
 @app.callback(
@@ -387,32 +418,52 @@ def step_simulation(n_clicks, current_state):
         Output("metrics-graph", "figure", allow_duplicate=True),
         Output("health-metrics", "children", allow_duplicate=True),
     ],
-    [Input("disrupt-sim-button", "n_clicks")],
-    [State("scenario-dropdown", "value"), State("simulation-state", "data")],
+    [Input("apply-scenario-button", "n_clicks")],
+    [
+        State("simulation-state", "data"),
+        State("scenario-dropdown", "value"),
+    ],
     prevent_initial_call=True,
 )
-def apply_disruption(n_clicks, scenario_value, current_state):
-    if n_clicks is None or not scenario_value:
+def apply_scenario(n_clicks, current_state, scenario_value):
+    if n_clicks is None or not current_state or not scenario_value:
         raise dash.exceptions.PreventUpdate
     
-    # Apply disruption
-    scenario = json.loads(scenario_value)
-    response = requests.post(f"{API_URL}/simulation/disruption", json=scenario)
-    data = response.json()
-    
-    # Create visualizations
-    network_fig = create_network_graph(data["nodes"], data["edges"])
-    metrics_fig = create_metrics_plot(data["metrics"])
-    
-    # Create health metrics display
-    health_metrics = [
-        html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
-        html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
-        html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
-        html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
-    ]
-    
-    return data, network_fig, metrics_fig, health_metrics
+    try:
+        # Apply scenario
+        scenario = json.loads(scenario_value)
+        response = requests.post(
+            f"{API_URL}/simulation/apply-scenario",
+            json=scenario
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        # Create visualizations
+        network_fig = create_network_graph(data["nodes"], data["edges"])
+        metrics_fig = create_metrics_plot(data["metrics"])
+        
+        # Create health metrics display
+        health_metrics = [
+            html.H5(f"Average Utilization: {data['health']['average_utilization']:.1%}"),
+            html.H5(f"Average Risk Score: {data['health']['average_risk_score']:.1%}"),
+            html.H5(f"Average Reliability: {data['health']['average_reliability']:.1%}"),
+            html.H5(f"Active Disruptions: {data['health']['active_disruptions']}"),
+        ]
+        
+        return data, network_fig, metrics_fig, health_metrics
+        
+    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        print(f"Error during API call: {str(e)}")
+        # Return current state in case of error
+        empty_fig = go.Figure()
+        empty_fig.update_layout(title="Error loading data")
+        return (
+            current_state,  # keep current state
+            empty_fig,  # empty network graph
+            empty_fig,  # empty metrics graph
+            html.H5("Error: Could not apply scenario")  # error message
+        )
 
 
 @app.callback(
@@ -429,4 +480,4 @@ def update_scenario_details(scenario_value):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host='0.0.0.0', port=8050) 
+    app.run(debug=True, host='0.0.0.0', port=8050) 

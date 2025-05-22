@@ -274,6 +274,9 @@ class SupplyChainDataGenerator:
             affected_nodes=[],  # To be filled by the simulation
             affected_edges=[],  # To be filled by the simulation
             impact_severity=scenario["impact_severity"],
+            affected_regions=scenario["affected_regions"],
+            affected_process_nodes=scenario["affected_process_nodes"],
+            mitigation_strategies=scenario["mitigation_strategies"],
         )
 
     def generate_supply_chain(
